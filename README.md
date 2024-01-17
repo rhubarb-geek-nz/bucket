@@ -15,6 +15,6 @@ Only a single flat level directory is supported.
 
 It is intended for private use, not on the public internet.
 
-The Kestel listener is configured using [appsettings.json](appsettings.json)
+The Kestrel listener is configured using [appsettings.json](appsettings.json)
 
 It uses Aot, minimal ASP.NET and Docker to create a modern deployment.
