@@ -2,7 +2,7 @@
 
 Simple mechanism to transfer files between legacy systems.
 
-It originated when trying to work with old machines which could use modern HTTPS.
+It originated when trying to work with old machines which couldn't use modern HTTPS.
 
 | Method | Url | Content | Comment |
 | ------ | --- | ------- | ------- |
