@@ -23,6 +23,7 @@ using Microsoft.Net.Http.Headers;
 using System.Net;
 using System.Net.Mime;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Web;
 
 namespace Bucket
@@ -36,6 +37,8 @@ namespace Bucket
         private readonly List<string> ? authorization;
         private readonly char[] invalidFileNameChars = Path.GetInvalidFileNameChars();
         private readonly char[] problemHrefChars = ['?', '*', ':'];
+        private readonly char[] pathSeparators = [':','/','\\'];
+        private readonly Dictionary<Regex,string> contentTypes= new Dictionary<Regex, String>();
 
         public BucketService(IConfiguration config, IWebHostEnvironment env,ILogger<BucketService> logger)
         {
@@ -49,6 +52,21 @@ namespace Bucket
 
             authorization = signtool.GetSection(HeaderNames.Authorization).Get<List<string>>();
             wwwAuthenticate = signtool.GetValue<string>(HeaderNames.WWWAuthenticate);
+
+            var contentTypeSection = signtool.GetSection(HeaderNames.ContentType);
+
+            if (contentTypeSection != null)
+            {
+                foreach (var contentType in contentTypeSection.GetChildren())
+                {
+                    string key = contentType.Key;
+                    string ? value = contentType.Value;
+                    if (value != null)
+                    {
+                        contentTypes.Add(new Regex(key), value);
+                    }
+                }
+            }
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -157,18 +175,39 @@ namespace Bucket
                         {
                             string filename = env.WebRootPath + path;
                             long length = new FileInfo(filename).Length;
-
-                            using (var outfile = File.Open(filename, FileMode.Open))
+                            string? contentType = null;
+                            string baseName = path;
+                            int index = path.LastIndexOfAny(pathSeparators);
+                            if (index != -1)
                             {
-                                response.ContentType = MediaTypeNames.Application.Octet;
-                                response.ContentLength = length;
+                                baseName = path.Substring(index + 1);
+                            }
 
+                            foreach (var ct in contentTypes)
+                            {
+                                if (ct.Key.Match(baseName).Success)
+                                {
+                                    contentType = ct.Value;
+
+                                    break;
+                                }
+                            }
+
+                            if (contentType == null)
+                            {
+                                contentType = MediaTypeNames.Application.Octet;
                                 ContentDisposition contentDisposition = new ContentDisposition("attachment");
 
                                 contentDisposition.FileName = Path.GetFileName(filename);
 
                                 response.Headers.ContentDisposition = contentDisposition.ToString();
+                            }
 
+                            response.ContentType = contentType;
+                            response.ContentLength = length;
+
+                            using (var outfile = File.Open(filename, FileMode.Open))
+                            {
                                 await outfile.CopyToAsync(response.Body);
                             }
                         }
@@ -189,6 +228,12 @@ namespace Bucket
                         foreach (IFormFile formFile in formFiles)
                         {
                             string fileName = formFile.FileName;
+                            int index = fileName.LastIndexOfAny(pathSeparators);
+
+                            if (index != -1)
+                            {
+                                fileName = fileName.Substring(index + 1);
+                            }
 
                             if (fileName.Length < 1)
                             {
